@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  nginx-test:
+    image: nginx:alpine
+    container_name: filename-generator-nginx-test
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/test.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - test-network
+    restart: unless-stopped
+
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+      args:
+        NODE_ENV: test
+    image: filename-generator:test
+    container_name: filename-generator-test
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://nginx-test/api
+      # Test-specific environment variables
+      CI: true
+      JEST_JUNIT_OUTPUT_DIR: ./test-results
+      JEST_JUNIT_OUTPUT_NAME: junit.xml
+    volumes:
+      - ./coverage:/app/coverage
+      - ./test-results:/app/test-results
+    command: npm run test:ci
+    networks:
+      - test-network
+
+  e2e-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    image: filename-generator:e2e-test
+    container_name: filename-generator-e2e-test
+    depends_on:
+      nginx-test:
+        condition: service_started
+      app:
+        condition: service_healthy
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://nginx-test/api
+      PLAYWRIGHT_BASE_URL: http://nginx-test
+    command: npm run test:e2e
+    networks:
+      - test-network
+    volumes:
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: test
+        NEXT_PUBLIC_API_URL: http://nginx-test/api
+    image: filename-generator:test-app
+    container_name: filename-generator-test-app
+    # No external ports - only accessible via nginx
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: test
+      PORT: 3000
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+networks:
+  test-network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16

@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: filename-generator-nginx-staging
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/staging.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-cache:/var/cache/nginx
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - staging-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+        labels: "service=nginx,env=staging"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+        NEXT_PUBLIC_API_URL: ${STAGING_API_URL:-https://staging.example.com/api}
+        BUILD_ID: ${BUILD_ID:-staging}
+        BUILD_DATE: ${BUILD_DATE}
+        VCS_REF: ${VCS_REF}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:staging-${BUILD_ID:-latest}
+    container_name: filename-generator-staging
+    # No external ports - only accessible via nginx
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${STAGING_API_URL:-https://staging.example.com/api}
+      # Staging-specific environment variables
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      ENABLE_MONITORING: ${ENABLE_MONITORING:-true}
+      SENTRY_DSN: ${SENTRY_DSN}
+      SENTRY_ENVIRONMENT: staging
+    restart: unless-stopped
+    networks:
+      - staging-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        labels: "service=filename-generator,env=staging"
+
+networks:
+  staging-network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  nginx-cache:
+    driver: local

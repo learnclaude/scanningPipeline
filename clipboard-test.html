@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clipboard Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 600px; }
+        .test-area { 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            margin: 20px 0; 
+            border-radius: 5px; 
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { 
+            padding: 10px 20px; 
+            margin: 10px 0; 
+            cursor: pointer; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+        }
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed; 
+        }
+        input { 
+            padding: 8px; 
+            width: 300px; 
+            margin-right: 10px; 
+        }
+        .spinner { 
+            display: inline-block; 
+            width: 16px; 
+            height: 16px; 
+            border: 2px solid #f3f3f3; 
+            border-top: 2px solid #333; 
+            border-radius: 50%; 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Clipboard Functionality Test</h1>
+        
+        <div class="test-area info">
+            <h3>Browser Support Information</h3>
+            <p><strong>Clipboard API Support:</strong> <span id="clipboardSupport"></span></p>
+            <p><strong>Secure Context:</strong> <span id="secureContext"></span></p>
+            <p><strong>ExecCommand Support:</strong> <span id="execCommandSupport"></span></p>
+            <p><strong>Recommended Method:</strong> <span id="recommendedMethod"></span></p>
+        </div>
+
+        <div class="test-area">
+            <h3>Test Clipboard Copy</h3>
+            <input type="text" id="testInput" value="Hello, this is a test text for clipboard!" placeholder="Enter text to copy">
+            <button id="copyBtn">Copy Text</button>
+            <button id="selectBtn">Select Text</button>
+            <div id="copyStatus"></div>
+        </div>
+
+        <div class="test-area">
+            <h3>Test Results</h3>
+            <div id="testResults"></div>
+        </div>
+    </div>
+
+    <script>
+        // Check browser support
+        function checkBrowserSupport() {
+            const clipboardSupported = !!(navigator.clipboard);
+            const secureContext = window.isSecureContext;
+            const execCommandSupported = document.queryCommandSupported && document.queryCommandSupported('copy');
+            
+            document.getElementById('clipboardSupport').textContent = clipboardSupported ? '✅ Yes' : '❌ No';
+            document.getElementById('secureContext').textContent = secureContext ? '✅ Yes' : '❌ No';
+            document.getElementById('execCommandSupport').textContent = execCommandSupported ? '✅ Yes' : '❌ No';
+            
+            let method = 'None available';
+            if (clipboardSupported && secureContext) {
+                method = 'Modern Clipboard API';
+            } else if (execCommandSupported) {
+                method = 'Legacy execCommand';
+            }
+            document.getElementById('recommendedMethod').textContent = method;
+            
+            return {
+                clipboardSupported,
+                secureContext,
+                execCommandSupported,
+                method
+            };
+        }
+
+        // Clipboard copy function with fallbacks
+        async function copyToClipboard(text) {
+            const copyBtn = document.getElementById('copyBtn');
+            const statusDiv = document.getElementById('copyStatus');
+            
+            copyBtn.disabled = true;
+            copyBtn.innerHTML = '<span class="spinner"></span> Copying...';
+            statusDiv.innerHTML = '';
+
+            try {
+                // Method 1: Modern Clipboard API
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    showStatus('✅ Successfully copied using Clipboard API!', 'success');
+                    return true;
+                }
+                
+                // Method 2: Legacy execCommand
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                if (successful) {
+                    showStatus('✅ Successfully copied using execCommand!', 'success');
+                    return true;
+                } else {
+                    throw new Error('execCommand copy failed');
+                }
+            } catch (error) {
+                showStatus('❌ Copy failed: ' + error.message, 'error');
+                selectText('testInput');
+                return false;
+            } finally {
+                copyBtn.disabled = false;
+                copyBtn.innerHTML = 'Copy Text';
+            }
+        }
+
+        // Select text function
+        function selectText(elementId) {
+            try {
+                const element = document.getElementById(elementId);
+                if (element) {
+                    element.focus();
+                    element.select();
+                    if (element.setSelectionRange) {
+                        element.setSelectionRange(0, element.value.length);
+                    }
+                    showStatus('📝 Text has been selected. Press Ctrl+C (or Cmd+C on Mac) to copy.', 'info');
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                showStatus('❌ Text selection failed: ' + error.message, 'error');
+                return false;
+            }
+        }
+
+        // Show status message
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('copyStatus');
+            statusDiv.innerHTML = `<div class="test-area ${type}">${message}</div>`;
+            
+            // Add to test results
+            const resultsDiv = document.getElementById('testResults');
+            const timestamp = new Date().toLocaleTimeString();
+            resultsDiv.innerHTML += `<p><strong>[${timestamp}]</strong> ${message}</p>`;
+        }
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            const support = checkBrowserSupport();
+            
+            document.getElementById('copyBtn').addEventListener('click', function() {
+                const text = document.getElementById('testInput').value;
+                copyToClipboard(text);
+            });
+            
+            document.getElementById('selectBtn').addEventListener('click', function() {
+                selectText('testInput');
+            });
+            
+            // Auto-test on load
+            showStatus('🚀 Page loaded. Browser support detected.', 'info');
+        });
+
+        // Test clipboard permissions
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({name: 'clipboard-write'}).then(function(result) {
+                showStatus('📋 Clipboard write permission: ' + result.state, 'info');
+            }).catch(function(error) {
+                showStatus('⚠️ Could not check clipboard permissions: ' + error.message, 'info');
+            });
+        }
+    </script>
+</body>
+</html>

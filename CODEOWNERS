@@ -1,0 +1,59 @@
+# CODEOWNERS file for automatic review assignment
+# Each line is a file pattern followed by one or more owners.
+
+# Global owners - will be requested for review on all changes
+* @sivaDemo/core-team
+
+# Frontend code owners
+/src/components/ @sivaDemo/frontend-team
+/src/pages/ @sivaDemo/frontend-team
+/src/styles/ @sivaDemo/frontend-team
+/public/ @sivaDemo/frontend-team
+*.tsx @sivaDemo/frontend-team
+*.jsx @sivaDemo/frontend-team
+*.css @sivaDemo/frontend-team
+*.scss @sivaDemo/frontend-team
+
+# Backend code owners
+/src/api/ @sivaDemo/backend-team
+/src/lib/ @sivaDemo/backend-team
+/src/services/ @sivaDemo/backend-team
+/src/utils/ @sivaDemo/backend-team
+*.ts @sivaDemo/backend-team
+*.js @sivaDemo/backend-team
+
+# Configuration and DevOps
+/.github/ @sivaDemo/devops-team
+/docker/ @sivaDemo/devops-team
+Dockerfile @sivaDemo/devops-team
+docker-compose*.yml @sivaDemo/devops-team
+*.yml @sivaDemo/devops-team
+*.yaml @sivaDemo/devops-team
+
+# Documentation
+*.md @sivaDemo/docs-team
+/docs/ @sivaDemo/docs-team
+
+# Testing
+/tests/ @sivaDemo/qa-team
+/cypress/ @sivaDemo/qa-team
+*.test.ts @sivaDemo/qa-team
+*.test.tsx @sivaDemo/qa-team
+*.spec.ts @sivaDemo/qa-team
+*.spec.tsx @sivaDemo/qa-team
+
+# Security-sensitive files
+.env* @sivaDemo/security-team @sivaDemo/core-team
+/src/auth/ @sivaDemo/security-team
+/src/middleware/auth* @sivaDemo/security-team
+
+# Package management
+package.json @sivaDemo/core-team
+package-lock.json @sivaDemo/core-team
+yarn.lock @sivaDemo/core-team
+
+# Build configuration
+next.config.js @sivaDemo/core-team @sivaDemo/devops-team
+tsconfig.json @sivaDemo/core-team
+.eslintrc* @sivaDemo/core-team
+.prettierrc* @sivaDemo/core-team

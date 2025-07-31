@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  nginx-dev:
+    image: nginx:alpine
+    container_name: filename-generator-nginx-dev
+    ports:
+      - "8090:80"
+    volumes:
+      - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      dev:
+        condition: service_healthy
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: development
+    image: filename-generator:dev
+    container_name: filename-generator-dev
+    # No external ports - only accessible via nginx
+    expose:
+      - "3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+      # Development-specific environment variables
+      NEXT_TELEMETRY_DISABLED: 1
+      WATCHPACK_POLLING: true # For file watching in containers
+      PORT: 3000
+    command: npm run dev
+    networks:
+      - dev-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+networks:
+  dev-network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 10.5.0.0/16
