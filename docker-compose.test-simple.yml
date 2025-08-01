@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  nginx-test:
+    image: nginx:alpine
+    container_name: filename-generator-nginx-test
+    ports:
+      - "18092:80"
+    volumes:
+      - ./nginx/test.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app-test
+    networks:
+      - test-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        NODE_ENV: test
+    image: filename-generator:test-simple
+    container_name: filename-generator-test-simple
+    expose:
+      - "3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      NODE_ENV: test
+      NEXT_PUBLIC_API_URL: http://localhost:18092/api
+      PORT: 3000
+      CI: true
+    command: npm run dev
+    networks:
+      - test-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  test-network:
+    driver: bridge
+    internal: false
+    ipam:
+      config:
+        - subnet: 172.22.0.0/16

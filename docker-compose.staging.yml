@@ -5,7 +5,7 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx-staging
     ports:
-      - "80:80"
+      - "18093:80"
       - "443:443"
     volumes:
       - ./nginx/staging.conf:/etc/nginx/nginx.conf:ro
@@ -29,17 +29,49 @@ services:
         max-file: "3"
         labels: "service=nginx,env=staging"
 
+  image-watcher:
+    image: alpine:latest
+    container_name: filename-generator-image-watcher
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.io}
+      DOCKER_IMAGE: ${DOCKER_IMAGE:-filename-generator}
+      STAGING_TAG: ${STAGING_TAG:-test-latest}
+      WEBHOOK_URL: ${STAGING_WEBHOOK_URL}
+    command: |
+      sh -c "
+        apk add --no-cache docker-cli curl jq &&
+        echo 'Starting image watcher for staging auto-deployment...' &&
+        while true; do
+          echo 'Checking for new images...' &&
+          LATEST_IMAGE=$$DOCKER_REGISTRY/$$DOCKER_IMAGE:$$STAGING_TAG &&
+          
+          # Pull latest image
+          docker pull $$LATEST_IMAGE 2>/dev/null || echo 'Failed to pull image' &&
+          
+          # Get current running image ID
+          CURRENT_ID=\$$(docker inspect filename-generator-staging --format='{{.Image}}' 2>/dev/null || echo 'none') &&
+          LATEST_ID=\$$(docker inspect $$LATEST_IMAGE --format='{{.Id}}' 2>/dev/null || echo 'none') &&
+          
+          if [ \"$$CURRENT_ID\" != \"$$LATEST_ID\" ] && [ \"$$LATEST_ID\" != 'none' ]; then
+            echo 'New image detected! Triggering staging deployment...' &&
+            if [ -n \"$$WEBHOOK_URL\" ]; then
+              curl -X POST $$WEBHOOK_URL -H 'Content-Type: application/json' \
+                -d '{\"action\":\"redeploy\",\"service\":\"staging\",\"image\":\"'$$LATEST_IMAGE'\"}' || echo 'Webhook failed'
+            fi &&
+            docker compose -f docker-compose.staging.yml up -d app --no-deps || echo 'Redeploy failed'
+          fi &&
+          
+          sleep 300  # Check every 5 minutes
+        done
+      "
+    networks:
+      - staging-network
+    restart: unless-stopped
+
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        NODE_ENV: production
-        NEXT_PUBLIC_API_URL: ${STAGING_API_URL:-https://staging.example.com/api}
-        BUILD_ID: ${BUILD_ID:-staging}
-        BUILD_DATE: ${BUILD_DATE}
-        VCS_REF: ${VCS_REF}
-    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:staging-${BUILD_ID:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:${STAGING_TAG:-test-latest}
     container_name: filename-generator-staging
     # No external ports - only accessible via nginx
     expose:

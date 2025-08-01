@@ -5,12 +5,11 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx-dev
     ports:
-      - "8090:80"
+      - "18091:80"
     volumes:
       - ./nginx/dev.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      dev:
-        condition: service_healthy
+      - dev
     networks:
       - dev-network
     restart: unless-stopped

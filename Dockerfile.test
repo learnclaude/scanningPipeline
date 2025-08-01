@@ -26,8 +26,8 @@ COPY package.json package-lock.json* ./
 # Install all dependencies including devDependencies
 RUN npm ci
 
-# Install Playwright browsers
-RUN npx playwright install-deps
+# Skip Playwright system dependencies (use Alpine packages instead)
+# RUN npx playwright install-deps
 
 # Copy application code
 COPY . .

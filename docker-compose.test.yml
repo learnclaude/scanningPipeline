@@ -1,11 +1,115 @@
 version: '3.8'
 
 services:
+  git-clone:
+    image: alpine/git:latest
+    container_name: filename-generator-git-clone
+    volumes:
+      - git-repo:/repo
+    environment:
+      GIT_REPO_URL: ${GIT_REPO_URL:-https://github.com/your-org/filename-generator.git}
+      GIT_BRANCH: ${GIT_BRANCH:-test}
+      GIT_TOKEN: ${GIT_TOKEN}
+    command: |
+      sh -c "
+        rm -rf /repo/* /repo/.* 2>/dev/null || true &&
+        if [ -n \"$$GIT_TOKEN\" ]; then
+          git clone -b $$GIT_BRANCH https://$$GIT_TOKEN@$${GIT_REPO_URL#https://} /repo
+        else
+          git clone -b $$GIT_BRANCH $$GIT_REPO_URL /repo
+        fi
+      "
+    networks:
+      - test-network
+
+  test-runner:
+    build:
+      context: ./
+      dockerfile: Dockerfile.test
+    image: filename-generator:test-runner
+    container_name: filename-generator-test-runner
+    depends_on:
+      git-clone:
+        condition: service_completed_successfully
+    volumes:
+      - git-repo:/app:ro
+      - test-results:/app/test-results
+      - coverage-results:/app/coverage
+    environment:
+      NODE_ENV: test
+      CI: true
+      JEST_JUNIT_OUTPUT_DIR: ./test-results
+      JEST_JUNIT_OUTPUT_NAME: junit.xml
+    command: |
+      sh -c "
+        cd /app &&
+        npm ci &&
+        npm run test:coverage &&
+        npm run lint &&
+        npm run type-check
+      "
+    networks:
+      - test-network
+
+  app-builder:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: filename-generator:test-build
+    container_name: filename-generator-app-builder
+    depends_on:
+      test-runner:
+        condition: service_completed_successfully
+    volumes:
+      - git-repo:/app:ro
+      - build-output:/app/.next
+    environment:
+      NODE_ENV: production
+    command: |
+      sh -c "
+        cd /app &&
+        npm ci --omit=dev &&
+        npm run build
+      "
+    networks:
+      - test-network
+
+  app:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        NODE_ENV: production
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:test-${BUILD_ID:-$(date +%s)}
+    container_name: filename-generator-test-app
+    depends_on:
+      app-builder:
+        condition: service_completed_successfully
+    volumes:
+      - git-repo:/app:ro
+      - build-output:/app/.next:ro
+    expose:
+      - "3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: http://nginx-test/api
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
   nginx-test:
     image: nginx:alpine
     container_name: filename-generator-nginx-test
     ports:
-      - "8080:80"
+      - "18092:80"
     volumes:
       - ./nginx/test.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -15,73 +119,42 @@ services:
       - test-network
     restart: unless-stopped
 
-  test:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-      args:
-        NODE_ENV: test
-    image: filename-generator:test
-    container_name: filename-generator-test
-    environment:
-      NODE_ENV: test
-      NEXT_PUBLIC_API_URL: http://nginx-test/api
-      # Test-specific environment variables
-      CI: true
-      JEST_JUNIT_OUTPUT_DIR: ./test-results
-      JEST_JUNIT_OUTPUT_NAME: junit.xml
-    volumes:
-      - ./coverage:/app/coverage
-      - ./test-results:/app/test-results
-    command: npm run test:ci
-    networks:
-      - test-network
-
-  e2e-test:
-    build:
-      context: .
-      dockerfile: Dockerfile.test
-    image: filename-generator:e2e-test
-    container_name: filename-generator-e2e-test
+  docker-publisher:
+    image: docker:24-cli
+    container_name: filename-generator-publisher
     depends_on:
-      nginx-test:
-        condition: service_started
       app:
         condition: service_healthy
-    environment:
-      NODE_ENV: test
-      NEXT_PUBLIC_API_URL: http://nginx-test/api
-      PLAYWRIGHT_BASE_URL: http://nginx-test
-    command: npm run test:e2e
-    networks:
-      - test-network
     volumes:
-      - ./test-results:/app/test-results
-      - ./playwright-report:/app/playwright-report
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        NODE_ENV: test
-        NEXT_PUBLIC_API_URL: http://nginx-test/api
-    image: filename-generator:test-app
-    container_name: filename-generator-test-app
-    # No external ports - only accessible via nginx
-    expose:
-      - "3000"
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - git-repo:/repo:ro
     environment:
-      NODE_ENV: test
-      PORT: 3000
+      DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.io}
+      DOCKER_USERNAME: ${DOCKER_USERNAME}
+      DOCKER_PASSWORD: ${DOCKER_PASSWORD}
+      DOCKER_IMAGE: ${DOCKER_IMAGE:-filename-generator}
+      BUILD_ID: ${BUILD_ID:-$(date +%s)}
+      GIT_COMMIT: ${GIT_COMMIT}
+    command: |
+      sh -c "
+        echo 'Login to Docker registry...' &&
+        echo $$DOCKER_PASSWORD | docker login $$DOCKER_REGISTRY -u $$DOCKER_USERNAME --password-stdin &&
+        
+        echo 'Building and pushing images...' &&
+        cd /repo &&
+        
+        # Build and tag images
+        docker build -t $$DOCKER_REGISTRY/$$DOCKER_IMAGE:test-$$BUILD_ID . &&
+        docker build -t $$DOCKER_REGISTRY/$$DOCKER_IMAGE:test-latest . &&
+        
+        # Push to registry
+        docker push $$DOCKER_REGISTRY/$$DOCKER_IMAGE:test-$$BUILD_ID &&
+        docker push $$DOCKER_REGISTRY/$$DOCKER_IMAGE:test-latest &&
+        
+        echo 'Images published successfully!'
+      "
     networks:
       - test-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 30s
 
 networks:
   test-network:
@@ -89,4 +162,14 @@ networks:
     internal: false
     ipam:
       config:
-        - subnet: 172.18.0.0/16
+        - subnet: 172.19.0.0/16
+
+volumes:
+  git-repo:
+    driver: local
+  test-results:
+    driver: local
+  coverage-results:
+    driver: local
+  build-output:
+    driver: local

@@ -4,7 +4,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
+      - "18090:80"
       - "443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
@@ -40,8 +40,62 @@ services:
         max-file: "5"
         labels: "service=nginx,env=production"
 
+  prod-image-watcher:
+    image: alpine:latest
+    container_name: filename-generator-prod-watcher
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      DOCKER_REGISTRY: ${DOCKER_REGISTRY:-docker.io}
+      DOCKER_IMAGE: ${DOCKER_IMAGE:-filename-generator}
+      PRODUCTION_TAG: ${PRODUCTION_TAG:-prod}
+      STAGING_APPROVAL_WEBHOOK: ${STAGING_APPROVAL_WEBHOOK}
+      PROD_DEPLOYMENT_WEBHOOK: ${PROD_DEPLOYMENT_WEBHOOK}
+      SLACK_WEBHOOK: ${SLACK_WEBHOOK}
+    command: |
+      sh -c "
+        apk add --no-cache docker-cli curl jq &&
+        echo 'Starting production image watcher...' &&
+        while true; do
+          echo 'Checking for new prod-labeled images...' &&
+          PROD_IMAGE=$$DOCKER_REGISTRY/$$DOCKER_IMAGE:$$PRODUCTION_TAG &&
+          
+          # Pull latest prod image
+          docker pull $$PROD_IMAGE 2>/dev/null || echo 'No prod image available' &&
+          
+          # Get current running image ID
+          CURRENT_ID=\$$(docker inspect filename-generator-prod --format='{{.Image}}' 2>/dev/null || echo 'none') &&
+          LATEST_ID=\$$(docker inspect $$PROD_IMAGE --format='{{.Id}}' 2>/dev/null || echo 'none') &&
+          
+          if [ \"$$CURRENT_ID\" != \"$$LATEST_ID\" ] && [ \"$$LATEST_ID\" != 'none' ]; then
+            echo 'New production image detected!' &&
+            
+            # Send notification
+            if [ -n \"$$SLACK_WEBHOOK\" ]; then
+              curl -X POST $$SLACK_WEBHOOK -H 'Content-Type: application/json' \
+                -d '{\"text\":\"🚀 New production deployment available for filename-generator\",\"attachments\":[{\"color\":\"warning\",\"fields\":[{\"title\":\"Action Required\",\"value\":\"Manual approval needed for production deployment\",\"short\":false}]}]}' || echo 'Slack notification failed'
+            fi &&
+            
+            # Wait for manual approval (production should be manual)
+            echo 'Production deployment requires manual approval...' &&
+            echo 'Run: docker compose -f docker-compose.prod.yml up -d app --no-deps' &&
+            
+            # Optional: Send webhook for external approval system
+            if [ -n \"$$PROD_DEPLOYMENT_WEBHOOK\" ]; then
+              curl -X POST $$PROD_DEPLOYMENT_WEBHOOK -H 'Content-Type: application/json' \
+                -d '{\"action\":\"approval_required\",\"service\":\"production\",\"image\":\"'$$PROD_IMAGE'\"}' || echo 'Approval webhook failed'
+            fi
+          fi &&
+          
+          sleep 600  # Check every 10 minutes for production
+        done
+      "
+    networks:
+      - prod-network
+    restart: unless-stopped
+
   app:
-    image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:${PRODUCTION_TAG:-prod}
     # No external ports - only accessible via nginx
     expose:
       - "3000"
