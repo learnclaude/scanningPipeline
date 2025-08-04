@@ -1,7 +1,15 @@
 # Test Dockerfile for running tests in CI/CD pipelines
 FROM node:18-alpine AS test
 
-# Install dependencies for testing
+# Accept build arguments for user/group IDs
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Accept git repository configuration
+ARG GIT_REPO_URL=https://github.com/learnclaude/sivaDemo.git
+ARG GIT_BRANCH=testing
+
+# Install dependencies for testing including git
 RUN apk add --no-cache \
     libc6-compat \
     chromium \
@@ -10,6 +18,7 @@ RUN apk add --no-cache \
     nss \
     freetype \
     ttf-freefont \
+    git \
     && rm -rf /var/cache/apk/*
 
 # Set Puppeteer/Playwright to use installed Chromium
@@ -20,25 +29,24 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Clone the repository
+RUN git clone ${GIT_REPO_URL} .
+
+# Checkout the specified branch
+RUN git checkout ${GIT_BRANCH}
 
 # Install all dependencies including devDependencies
 RUN npm ci
 
-# Install Playwright browsers
-RUN npx playwright install-deps
+# Skip Playwright browser installation since we manually installed browsers
 
-# Copy application code
-COPY . .
+# Create test user with matching host IDs
+RUN addgroup -g ${GROUP_ID} -S testgroup 2>/dev/null || addgroup -S testgroup && \
+    adduser -u ${USER_ID} -S testuser -G testgroup 2>/dev/null || adduser -S testuser -G testgroup
 
-# Create test user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S testuser -u 1001 -G nodejs
-
-# Create directories for test outputs
+# Create directories for test outputs and set ownership
 RUN mkdir -p coverage test-results playwright-report && \
-    chown -R testuser:nodejs coverage test-results playwright-report
+    chown -R testuser:testgroup /app
 
 # Set test environment
 ENV NODE_ENV=test
@@ -47,5 +55,8 @@ ENV CI=true
 # Switch to test user
 USER testuser
 
-# Default command runs all tests
-CMD ["npm", "run", "test:all"]
+# Configure git to trust the app directory for the testuser
+RUN git config --global --add safe.directory /app
+
+# Default command pulls latest changes and runs all tests
+CMD ["sh", "-c", "git pull origin ${GIT_BRANCH} && npm run test:all"]

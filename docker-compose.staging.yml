@@ -5,11 +5,10 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx-staging
     ports:
-      - "80:80"
-      - "443:443"
+      - "18093:80"
+      - "18094:443"
     volumes:
-      - ./nginx/staging.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/staging-simple.conf:/etc/nginx/nginx.conf:ro
       - nginx-cache:/var/cache/nginx
     depends_on:
       app:
@@ -83,7 +82,7 @@ networks:
     internal: false
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: 192.168.100.0/24
 
 volumes:
   nginx-cache:

@@ -3,6 +3,11 @@
 
 # Base stage with common dependencies
 FROM node:18-alpine AS base
+
+# Accept build arguments for user/group IDs
+ARG USER_ID=1001
+ARG GROUP_ID=1001
+
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 # Install security updates
@@ -13,8 +18,9 @@ FROM base AS deps
 # Copy package files
 COPY package.json package-lock.json* ./
 # Clean install production dependencies with cache mount for faster builds
+# Skip prepare scripts since husky is not needed in production
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --only=production
+    npm_config_ignore_scripts=true npm ci --only=production
 
 # Dev dependencies stage - install all dependencies for building
 FROM base AS dev-deps
@@ -62,9 +68,9 @@ LABEL org.opencontainers.image.title="Filename Generator" \
       org.opencontainers.image.vendor="Your Company" \
       org.opencontainers.image.licenses="MIT"
 
-# Create non-root user with specific UID/GID for better security
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+# Create non-root user with configurable UID/GID for better security
+RUN addgroup -g ${GROUP_ID} -S nodejs 2>/dev/null || addgroup -S nodejs && \
+    adduser -u ${USER_ID} -S nextjs -G nodejs 2>/dev/null || adduser -S nextjs -G nodejs
 
 # Copy production dependencies
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules

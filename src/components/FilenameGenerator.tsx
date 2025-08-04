@@ -58,7 +58,7 @@ export default function FilenameGenerator() {
   }, [])
 
   const { copyToClipboard, selectText, isCopying, isClipboardSupported, clipboardMethod } = useClipboard({
-    onSuccess: (text) => {
+    onSuccess: () => {
       toast.success('Filename copied to clipboard!')
     },
     onError: (error) => {

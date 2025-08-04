@@ -5,7 +5,7 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx-test
     ports:
-      - "8080:80"
+      - "18092:80"
     volumes:
       - ./nginx/test.conf:/etc/nginx/nginx.conf:ro
     depends_on:
@@ -21,11 +21,17 @@ services:
       dockerfile: Dockerfile.test
       args:
         NODE_ENV: test
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        GIT_REPO_URL: ${GIT_REPO_URL:-https://github.com/learnclaude/sivaDemo.git}
+        GIT_BRANCH: ${GIT_BRANCH:-testing}
     image: filename-generator:test
     container_name: filename-generator-test
     environment:
       NODE_ENV: test
       NEXT_PUBLIC_API_URL: http://nginx-test/api
+      # All requests should go through nginx
+      BASE_URL: http://nginx-test
       # Test-specific environment variables
       CI: true
       JEST_JUNIT_OUTPUT_DIR: ./test-results
@@ -33,7 +39,8 @@ services:
     volumes:
       - ./coverage:/app/coverage
       - ./test-results:/app/test-results
-    command: npm run test:ci
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    command: sh -c "git config --global --add safe.directory /app && git pull origin $${GIT_BRANCH:-testing} && npm run test:ci"
     networks:
       - test-network
 
@@ -41,6 +48,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.test
+      args:
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
+        GIT_REPO_URL: ${GIT_REPO_URL:-https://github.com/learnclaude/sivaDemo.git}
+        GIT_BRANCH: ${GIT_BRANCH:-testing}
     image: filename-generator:e2e-test
     container_name: filename-generator-e2e-test
     depends_on:
@@ -51,10 +63,13 @@ services:
     environment:
       NODE_ENV: test
       NEXT_PUBLIC_API_URL: http://nginx-test/api
+      # All requests go through nginx
       PLAYWRIGHT_BASE_URL: http://nginx-test
-    command: npm run test:e2e
+      BASE_URL: http://nginx-test
+    command: sh -c "git config --global --add safe.directory /app && git pull origin $${GIT_BRANCH:-testing} && npm run test:e2e"
     networks:
       - test-network
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     volumes:
       - ./test-results:/app/test-results
       - ./playwright-report:/app/playwright-report
@@ -66,6 +81,8 @@ services:
       args:
         NODE_ENV: test
         NEXT_PUBLIC_API_URL: http://nginx-test/api
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     image: filename-generator:test-app
     container_name: filename-generator-test-app
     # No external ports - only accessible via nginx
@@ -89,4 +106,4 @@ networks:
     internal: false
     ipam:
       config:
-        - subnet: 172.18.0.0/16
+        - subnet: 10.10.0.0/16
