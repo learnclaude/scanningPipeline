@@ -14,6 +14,8 @@ services:
     networks:
       - test-network
     restart: unless-stopped
+    env_file:
+      - .env.test
 
   test:
     build:
@@ -40,6 +42,8 @@ services:
       - ./coverage:/app/coverage
       - ./test-results:/app/test-results
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    env_file:
+      - .env.test
     command: sh -c "git config --global --add safe.directory /app && git pull origin $${GIT_BRANCH:-testing} && npm run test:ci"
     networks:
       - test-network
@@ -70,6 +74,8 @@ services:
     networks:
       - test-network
     user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
+    env_file:
+      - .env.test
     volumes:
       - ./test-results:/app/test-results
       - ./playwright-report:/app/playwright-report
@@ -91,6 +97,8 @@ services:
     environment:
       NODE_ENV: test
       PORT: 3000
+    env_file:
+      - .env.test
     networks:
       - test-network
     healthcheck:

@@ -27,6 +27,8 @@ services:
         max-size: "5m"
         max-file: "3"
         labels: "service=nginx,env=staging"
+    env_file:
+      - .env.staging
 
   app:
     build:
@@ -38,6 +40,8 @@ services:
         BUILD_ID: ${BUILD_ID:-staging}
         BUILD_DATE: ${BUILD_DATE}
         VCS_REF: ${VCS_REF}
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:staging-${BUILD_ID:-latest}
     container_name: filename-generator-staging
     # No external ports - only accessible via nginx
@@ -75,6 +79,8 @@ services:
         max-size: "10m"
         max-file: "3"
         labels: "service=filename-generator,env=staging"
+    env_file:
+      - .env.staging
 
 networks:
   staging-network:
