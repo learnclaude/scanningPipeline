@@ -26,6 +26,8 @@ services:
       dockerfile: Dockerfile.dev
       args:
         NODE_ENV: development
+        USER_ID: ${USER_ID:-1000}
+        GROUP_ID: ${GROUP_ID:-1000}
     image: filename-generator:dev
     container_name: filename-generator-dev
     # No external ports - only accessible via nginx
@@ -34,7 +36,6 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/.next
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
@@ -42,6 +43,7 @@ services:
       NEXT_TELEMETRY_DISABLED: 1
       WATCHPACK_POLLING: true # For file watching in containers
       PORT: 3000
+    user: "${USER_ID:-1000}:${GROUP_ID:-1000}"
     command: npm run dev
     networks:
       - dev-network

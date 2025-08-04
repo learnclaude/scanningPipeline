@@ -2,12 +2,18 @@
     with branching,
     CI/CD pipleline
 
+    create bitbucket repository via cli  
+
 2. Project description
     Frontend: react and nextjs
     backend: node nextjs
     Application: Filename generator give Brain id,series type,section. it should generate filename that can be edited and also copied to clipboard
 
+1.1 git worktree setup for dev,testing,staging and production + for each developers
+
 3. Docker setup enterpise grade. with development, testing, staging and production 
+
+4. Create a reposistory in dockerhub via cli 
 
 
 4. All request inside to docker should via nginx and via single port. ngixn should do proxy. inter docker communication should be via docker internal network

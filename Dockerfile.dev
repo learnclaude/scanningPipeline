@@ -5,6 +5,14 @@ FROM node:18-alpine
 # Install dependencies for building native modules and health checks
 RUN apk add --no-cache libc6-compat python3 make g++ curl
 
+# Accept build arguments for user/group IDs
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Create group and user with matching host IDs
+RUN addgroup -g ${GROUP_ID} -S appgroup 2>/dev/null || addgroup -S appgroup && \
+    adduser -u ${USER_ID} -S appuser -G appgroup 2>/dev/null || adduser -S appuser -G appgroup
+
 WORKDIR /app
 
 # Copy package files
@@ -12,6 +20,14 @@ COPY package.json ./
 
 # Install all dependencies (including devDependencies) and generate lock file
 RUN npm install --no-scripts
+
+# Change ownership of app directory and node_modules to appuser
+RUN chown -R appuser:appgroup /app
+
+# Create .next directory with proper ownership
+RUN mkdir -p /app/.next && chown -R appuser:appgroup /app/.next
+
+# Note: User will be set via docker-compose user directive
 
 # Expose port
 EXPOSE 3000
