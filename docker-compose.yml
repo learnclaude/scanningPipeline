@@ -5,11 +5,9 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "18091:80"
     volumes:
       - ./nginx/default.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       app:
         condition: service_healthy
@@ -27,10 +25,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost/api}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:18091/api}
         NODE_ENV: production
     container_name: filename-generator-app
-    # No ports exposed - only accessible via nginx
+    # Only expose port internally - no external port mapping
     expose:
       - "3000"
     environment:
@@ -50,6 +48,3 @@ networks:
   app-network:
     driver: bridge
     internal: false
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16

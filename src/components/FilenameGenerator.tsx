@@ -131,12 +131,13 @@ export default function FilenameGenerator() {
       
       // Auto-increment slide ID and section numbers based on increment value for next generation
       const increment = formData.increment || 1
-      const nextSlideId = (formData.endSectionNumber + increment).toString()
+      const endSection = formData.endSectionNumber || 1
+      const nextSlideId = (endSection + increment).toString()
       setFormData(prev => ({ 
         ...prev, 
         slideId: nextSlideId,
-        startSectionNumber: formData.endSectionNumber + increment,
-        endSectionNumber: formData.endSectionNumber + increment
+        startSectionNumber: endSection + increment,
+        endSectionNumber: endSection + increment
       }))
       
       toast.success(`Generated ${data.totalCount} filename${data.totalCount > 1 ? 's' : ''} successfully!`)
