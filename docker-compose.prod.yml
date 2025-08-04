@@ -4,11 +4,10 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "18090:80"
+      - "18095:443"
     volumes:
-      - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/production.conf:/etc/nginx/nginx.conf:ro
       - nginx-cache:/var/cache/nginx
     depends_on:
       - app
@@ -16,11 +15,6 @@ services:
       - prod-network
     restart: always
     deploy:
-      mode: replicated
-      replicas: 2
-      update_config:
-        parallelism: 1
-        delay: 10s
       resources:
         limits:
           cpus: '1'
@@ -41,7 +35,7 @@ services:
         labels: "service=nginx,env=production"
 
   app:
-    image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${VERSION:-latest}
+    image: ${DOCKER_REGISTRY:-}${DOCKER_IMAGE:-filename-generator}:${VERSION:-production-latest}
     # No external ports - only accessible via nginx
     expose:
       - "3000"
@@ -60,19 +54,6 @@ services:
     networks:
       - prod-network
     deploy:
-      mode: replicated
-      replicas: ${REPLICAS:-2}
-      update_config:
-        parallelism: 1
-        delay: 10s
-        failure_action: rollback
-        monitor: 60s
-        max_failure_ratio: 0.3
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 3
-        window: 120s
       resources:
         limits:
           cpus: '2'
@@ -92,9 +73,6 @@ services:
         max-size: "50m"
         max-file: "10"
         labels: "service=filename-generator,env=production"
-    secrets:
-      - source: app_secrets
-        target: /run/secrets/app_secrets
 
 
   redis:
@@ -125,13 +103,11 @@ services:
 
 networks:
   prod-network:
-    driver: overlay
-    encrypted: true
+    driver: bridge
     internal: false
-    attachable: true
     ipam:
       config:
-        - subnet: 172.21.0.0/16
+        - subnet: 192.168.200.0/24
 
 volumes:
   nginx-cache:
@@ -139,6 +115,3 @@ volumes:
   redis-data:
     driver: local
 
-secrets:
-  app_secrets:
-    external: true
