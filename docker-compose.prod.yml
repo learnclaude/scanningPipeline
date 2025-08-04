@@ -4,8 +4,8 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "80:80"
-      - "443:443"
+      - "18090:80"
+      - "18443:443"
     volumes:
       - ./nginx/prod.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
@@ -48,7 +48,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      NEXT_PUBLIC_API_URL: ${PRODUCTION_API_URL}
+      NEXT_PUBLIC_API_URL: ${PRODUCTION_API_URL:-http://localhost:18090/api}
       # Production-specific environment variables
       LOG_LEVEL: ${LOG_LEVEL:-info}
       ENABLE_MONITORING: ${ENABLE_MONITORING:-true}
