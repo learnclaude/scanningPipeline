@@ -1,0 +1,47 @@
+{
+  "environments": {
+    "development": {
+      "subnet": "10.5.0.0/16",
+      "gateway": "10.5.0.1",
+      "services": {
+        "nginx": "10.5.0.10",
+        "app": "10.5.0.20",
+        "redis": "10.5.0.30"
+      }
+    },
+    "test": {
+      "subnet": "172.18.0.0/16",
+      "gateway": "172.18.0.1",
+      "services": {
+        "nginx": "172.18.0.10",
+        "app": "172.18.0.20"
+      }
+    },
+    "staging": {
+      "subnet": "172.20.0.0/16",
+      "gateway": "172.20.0.1",
+      "services": {
+        "nginx": "172.20.0.10",
+        "app": "172.20.0.20",
+        "redis": "172.20.0.30"
+      }
+    },
+    "production": {
+      "subnet": "172.21.0.0/16",
+      "gateway": "172.21.0.1",
+      "services": {
+        "nginx": "172.21.0.10",
+        "app": "172.21.0.20",
+        "redis": "172.21.0.30"
+      }
+    }
+  },
+  "dns": {
+    "primary": "8.8.8.8",
+    "secondary": "8.8.4.4"
+  },
+  "security": {
+    "internal_only": true,
+    "isolated_networks": true
+  }
+}

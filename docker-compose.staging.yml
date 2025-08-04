@@ -5,8 +5,8 @@ services:
     image: nginx:alpine
     container_name: filename-generator-nginx-staging
     ports:
-      - "18093:80"
-      - "18094:443"
+      - "${EXTERNAL_INTERFACE_IP:-0.0.0.0}:${NGINX_STAGING_PORT:-18093}:80"
+      - "${EXTERNAL_INTERFACE_IP:-0.0.0.0}:${NGINX_STAGING_HTTPS_PORT:-18094}:443"
     volumes:
       - ./nginx/staging-simple.conf:/etc/nginx/nginx.conf:ro
       - nginx-cache:/var/cache/nginx
