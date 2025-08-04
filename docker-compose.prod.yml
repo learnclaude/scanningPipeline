@@ -3,6 +3,8 @@ version: '3.8'
 services:
   nginx:
     image: nginx:alpine
+    container_name: filename-generator-nginx-prod
+    hostname: nginx-prod.local
     ports:
       - "18090:80"
       - "18095:443"
@@ -12,7 +14,12 @@ services:
     depends_on:
       - app
     networks:
-      - prod-network
+      prod-network:
+        ipv4_address: 10.103.0.10
+    labels:
+      - "environment=production"
+      - "service=nginx"
+      - "network.subnet=10.103.0.0/24"
     restart: always
     deploy:
       resources:
@@ -36,12 +43,16 @@ services:
 
   app:
     image: ${DOCKER_REGISTRY:-}${DOCKER_IMAGE:-filename-generator}:${VERSION:-production-latest}
+    container_name: filename-generator-app-prod
+    hostname: app-prod.local
     # No external ports - only accessible via nginx
     expose:
       - "3000"
     environment:
       NODE_ENV: production
       PORT: 3000
+      ENVIRONMENT: production
+      HOSTNAME: app-prod.local
       NEXT_PUBLIC_API_URL: ${PRODUCTION_API_URL:-http://localhost:18090/api}
       # Production-specific environment variables
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -52,7 +63,12 @@ services:
       NODE_OPTIONS: "--max-old-space-size=2048"
     restart: always
     networks:
-      - prod-network
+      prod-network:
+        ipv4_address: 10.103.0.20
+    labels:
+      - "environment=production"
+      - "service=app"
+      - "network.subnet=10.103.0.0/24"
     deploy:
       resources:
         limits:
@@ -78,12 +94,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: filename-generator-redis-prod
+    hostname: redis-prod.local
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     # No external ports - only accessible via internal network
     expose:
       - "6379"
     networks:
-      - prod-network
+      prod-network:
+        ipv4_address: 10.103.0.30
+    labels:
+      - "environment=production"
+      - "service=redis"
+      - "network.subnet=10.103.0.0/24"
     restart: always
     deploy:
       resources:
@@ -103,11 +125,22 @@ services:
 
 networks:
   prod-network:
+    name: filename-generator-prod-network
     driver: bridge
     internal: false
     ipam:
+      driver: default
       config:
-        - subnet: 192.168.200.0/24
+        - subnet: 10.103.0.0/24
+          gateway: 10.103.0.1
+    driver_opts:
+      com.docker.network.bridge.name: prod-bridge
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    labels:
+      - "environment=production"
+      - "purpose=isolation"
+      - "subnet=10.103.0.0/24"
 
 volumes:
   nginx-cache:

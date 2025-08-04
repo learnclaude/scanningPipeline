@@ -4,6 +4,7 @@ services:
   nginx:
     image: nginx:alpine
     container_name: filename-generator-nginx-staging
+    hostname: nginx-staging.local
     ports:
       - "18093:80"
       - "18094:443"
@@ -14,7 +15,12 @@ services:
       app:
         condition: service_healthy
     networks:
-      - staging-network
+      staging-network:
+        ipv4_address: 10.102.0.10
+    labels:
+      - "environment=staging"
+      - "service=nginx"
+      - "network.subnet=10.102.0.0/24"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
@@ -40,12 +46,15 @@ services:
         VCS_REF: ${VCS_REF}
     image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_IMAGE:-filename-generator}:staging-${BUILD_ID:-latest}
     container_name: filename-generator-staging
+    hostname: app-staging.local
     # No external ports - only accessible via nginx
     expose:
       - "3000"
     environment:
       NODE_ENV: production
       PORT: 3000
+      ENVIRONMENT: staging
+      HOSTNAME: app-staging.local
       NEXT_PUBLIC_API_URL: ${STAGING_API_URL:-https://staging.example.com/api}
       # Staging-specific environment variables
       LOG_LEVEL: ${LOG_LEVEL:-debug}
@@ -54,7 +63,12 @@ services:
       SENTRY_ENVIRONMENT: staging
     restart: unless-stopped
     networks:
-      - staging-network
+      staging-network:
+        ipv4_address: 10.102.0.20
+    labels:
+      - "environment=staging"
+      - "service=app"
+      - "network.subnet=10.102.0.0/24"
     deploy:
       resources:
         limits:
@@ -76,14 +90,50 @@ services:
         max-file: "3"
         labels: "service=filename-generator,env=staging"
 
+  redis:
+    image: redis:7-alpine
+    container_name: filename-generator-redis-staging
+    hostname: redis-staging.local
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    expose:
+      - "6379"
+    networks:
+      staging-network:
+        ipv4_address: 10.102.0.30
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    labels:
+      - "environment=staging"
+      - "service=redis"
+      - "network.subnet=10.102.0.0/24"
+    volumes:
+      - redis-data:/data
+
 networks:
   staging-network:
+    name: filename-generator-staging-network
     driver: bridge
     internal: false
     ipam:
+      driver: default
       config:
-        - subnet: 192.168.100.0/24
+        - subnet: 10.102.0.0/24
+          gateway: 10.102.0.1
+    driver_opts:
+      com.docker.network.bridge.name: staging-bridge
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    labels:
+      - "environment=staging"
+      - "purpose=isolation"
+      - "subnet=10.102.0.0/24"
 
 volumes:
   nginx-cache:
+    driver: local
+  redis-data:
     driver: local

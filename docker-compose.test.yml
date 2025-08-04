@@ -4,6 +4,7 @@ services:
   nginx-test:
     image: nginx:alpine
     container_name: filename-generator-nginx-test
+    hostname: nginx-test.local
     ports:
       - "18092:80"
     volumes:
@@ -12,8 +13,13 @@ services:
       app:
         condition: service_healthy
     networks:
-      - test-network
+      test-network:
+        ipv4_address: 10.101.0.10
     restart: unless-stopped
+    labels:
+      - "environment=testing"
+      - "service=nginx"
+      - "network.subnet=10.101.0.0/24"
 
   test:
     build:
@@ -85,25 +91,44 @@ services:
         GROUP_ID: ${GROUP_ID:-1000}
     image: filename-generator:test-app
     container_name: filename-generator-test-app
+    hostname: app-test.local
     # No external ports - only accessible via nginx
     expose:
       - "3000"
     environment:
       NODE_ENV: test
       PORT: 3000
+      ENVIRONMENT: testing
+      HOSTNAME: app-test.local
     networks:
-      - test-network
+      test-network:
+        ipv4_address: 10.101.0.20
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 5s
       timeout: 3s
       retries: 5
       start_period: 30s
+    labels:
+      - "environment=testing"
+      - "service=app"
+      - "network.subnet=10.101.0.0/24"
 
 networks:
   test-network:
+    name: filename-generator-test-network
     driver: bridge
     internal: false
     ipam:
+      driver: default
       config:
-        - subnet: 10.10.0.0/16
+        - subnet: 10.101.0.0/24
+          gateway: 10.101.0.1
+    driver_opts:
+      com.docker.network.bridge.name: test-bridge
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+    labels:
+      - "environment=testing"
+      - "purpose=isolation"
+      - "subnet=10.101.0.0/24"
